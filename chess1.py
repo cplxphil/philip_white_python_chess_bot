@@ -93,7 +93,7 @@ class KingSpecialMover(Piece): # all possible King castling moves, depending
     
 
 class PawnSpecialMover(Piece):
-    pass   
+    pass
 
 class DiagonalMover(Piece):       # whether or not the target square has a piece on it, move the captured piece/non-piece to 0,0
     def IncludeMoves(self):
@@ -114,13 +114,14 @@ class DiagonalMover(Piece):       # whether or not the target square has a piece
             if (TargetSquare.rank > 0 and TargetSquare.file < 9):
                 MovesToAddList.append(Move(copy.deepcopy(SourceSquare),copy.deepcopy(TargetSquare),Square(0,0), Square(0,0)))
         for a in range(SourceSquare.file-1, 1-1,-1):  # move file down and rank up
-            TargetSquare = Square(a,  (a - SourceSquare.file) + SourceSquare.rank)
-            if (TargetSquare.rank > 0 and TargetSquare.file < 9):
+            TargetSquare = Square(a,  (SourceSquare.file - a) + SourceSquare.rank)
+            if (TargetSquare.rank < 9 and TargetSquare.file > 0):
                 MovesToAddList.append(Move(copy.deepcopy(SourceSquare),copy.deepcopy(TargetSquare),Square(0,0), Square(0,0)))
     
         return MovesToAddList
-        # there are two more for loops to do, finish this function another time!  Try to get it right!  Test the function when you're done with it!
-    
+
+
+
 
 class ForwardVerticalMover(Piece):
     def IncludeMoves(self):
@@ -133,9 +134,9 @@ class ForwardVerticalMover(Piece):
 
 class BackwardVerticalMover(Piece):
     def IncludeMoves(self):
-        SourceSquare = self.square
+        SourceSquare = copy.deepcopy(self.square)
         MovesToAddList = []
-        for a in range(SourceSquare.rank-1, 1-1):
+        for a in range(SourceSquare.rank-1, 1-1,-1):        # I had omitted the -1 here, oops
             TargetSquare = Square(SourceSquare.file,a)
             MovesToAddList.append(Move(copy.deepcopy(SourceSquare),copy.deepcopy(TargetSquare),Square(0,0), Square(0,0)))
         return MovesToAddList
@@ -247,18 +248,66 @@ class LinearObstructionRestricted(Piece):
                                 moveToDrop = Move(copy.deepcopy(self.square),copy.deepcopy(dropMovesSquare),Square(0,0),Square(0,0))
                                 dropMovesSquare.file += horizontalIncrement
                                 dropMovesSquare.rank += verticalIncrement
-        
+
+                                toRemove = []
                                 for inToReturn in toReturn:
-                                    print ("yep!")
+                                    # print ("yep!")
                                     if moveToDrop.move1squareSource.file == inToReturn.move1squareSource.file and moveToDrop.move1squareSource.rank == inToReturn.move1squareSource.rank and moveToDrop.move1squareTarget.file == inToReturn.move1squareTarget.file and moveToDrop.move1squareTarget.rank == inToReturn.move1squareTarget.rank:
                                     # print("qqqq")
-                                        toReturn.remove(inToReturn)
+                                        toRemove.append(inToReturn)
+                                for item in toRemove:
+                                    toReturn.remove(item)
+                            # be careful!  When you remove from a list, you must not mess up the indexing/etc.
 #                            break    # we don't need to continue this loop after we've found the obstruction and done the removals
                                          # yes we do, we need to do the other pieces...omit the break statement!
 #         for i in range(len(toReturn)):
 #            print(f"Move {i}:  {toReturn[i].move1squareSource.file}, {toReturn[i].move1squareSource.rank}, to {toReturn[i].move1squareTarget.file}, {toReturn[i].move1squareTarget.rank}")
         return toReturn
-                                
+
+
+
+class OneSquareAtATimeRestricted(Piece): # applies only to the King--the pawn needs a separate rule, because it can move two squares at first
+    def ExcludeMoves(initialMovesList): # we actually don't need self here...and we don't need chessboard
+        toReturn = copy.deepcopy(initialMovesList)
+        toRemove = []
+        for selectedMove in toReturn:   # we can't remove from the list we're busy iterating over
+            horizontalDifference = abs(selectedMove.move1squareSource.file - selectedMove.move1squareTarget.file)
+            verticalDifference = abs(selectedMove.move1squareSource.rank - selectedMove.move1squareTarget.rank)
+            # print (horizontalDifference)
+            # print (verticalDifference)
+            # print(f"Move:  {selectedMove.move1squareSource.file}, {selectedMove.move1squareSource.rank}, to {selectedMove.move1squareTarget.file}, {selectedMove.move1squareTarget.rank}")
+
+            if horizontalDifference > 1 or verticalDifference > 1:
+                toRemove.append(selectedMove)
+        for item in toRemove:
+            toReturn.remove(item)
+        return toReturn
+        
+
+class PawnRestricted(Piece):
+    pass
+
+class SpecialMovesRestricted(Piece): # restricts castling (King) and en passant (Pawn)
+    pass
+
+class CheckRestricted(Piece):
+    pass
+
+class SameColorPieceOnTargetSquareRestriction(Piece):
+    def ExcludeMoves(self, chessboard,initialMovesList):
+        toReturn = copy.deepcopy(initialMovesList)
+        toRemove = []
+        for item in toReturn:
+            for selectedPiece in chessboard.allPieces:
+                if selectedPiece.square.file == item.move1squareTarget.file and selectedPiece.square.rank == item.move1squareTarget.rank:
+                    if selectedPiece.color == self.color:
+                        toRemove.append(item)
+        for item in toRemove:
+            toReturn.remove(item)
+        return toReturn
+
+
+
 
 
 
@@ -275,12 +324,14 @@ class Queen(DiagonalMover, ForwardVerticalMover, BackwardVerticalMover, Horizont
         movesList += ForwardVerticalMover.IncludeMoves(self).copy() # This is crucial--to run a parent class's routine, refer to the
                                                 # parentClass and pass self in to the member function, as it is done here
         movesList += DiagonalMover.IncludeMoves(self).copy()
+        movesList += BackwardVerticalMover.IncludeMoves(self).copy()
         movesList += HorizontalMover.IncludeMoves(self).copy()
 #        print ("flagA")
         for i in range(len(movesList)):
             print(f"Move {i}:  {movesList[i].move1squareSource.file}, {movesList[i].move1squareSource.rank}, to {movesList[i].move1squareTarget.file}, {movesList[i].move1squareTarget.rank}")
-        print("flagB")
+        # print("flagB")
         movesList = LinearObstructionRestricted.ExcludeMoves(self,chessboard,movesList)
+        movesList = SameColorPieceOnTargetSquareRestriction.ExcludeMoves(self,chessboard, movesList)
 #        print("flagB.5")
         for i in range(len(movesList)):
             print(f"Move {i}:  {movesList[i].move1squareSource.file}, {movesList[i].move1squareSource.rank}, to {movesList[i].move1squareTarget.file}, {movesList[i].move1squareTarget.rank}")
@@ -290,6 +341,12 @@ class Rook():
     def setup(self):
         self.pieceId = 'r'
     pass
+
+
+
+
+
+# HAD TO STOP AT 3:06 P.M.
 
 class Bishop():
     def setup(self):
@@ -314,17 +371,18 @@ class Knight(KnightMover):
 class King(DiagonalMover, ForwardVerticalMover, BackwardVerticalMover, HorizontalMover, KingSpecialMover):
     def setup(self):
         self.pieceId = 'k'
-    def testfunc(self):
+    def testfunc(self, chessboard):
         movesList = []
         movesList += DiagonalMover.IncludeMoves(self).copy() + ForwardVerticalMover.IncludeMoves(self).copy() + BackwardVerticalMover.IncludeMoves(self).copy() + HorizontalMover.IncludeMoves(self).copy() + KingSpecialMover.IncludeMoves(self).copy()
-#        for i in range(len(movesList)):
-#            print(f"Move {i}:  {movesList[i].move1squareSource.file}, {movesList[i].move1squareSource.rank}, to {movesList[i].move1squareTarget.file}, {movesList[i].move1squareTarget.rank}")
+        movesList = OneSquareAtATimeRestricted.ExcludeMoves(movesList)
+        for i in range(len(movesList)):
+            print(f"Move {i}:  {movesList[i].move1squareSource.file}, {movesList[i].move1squareSource.rank}, to {movesList[i].move1squareTarget.file}, {movesList[i].move1squareTarget.rank}")
 
 
 
 
 
-q = Queen(1,Square(4,4))
+q = Queen(1,Square(4,8))
 q.setup()  # always run the setup function right away
 # q.testfunc()
 
@@ -332,21 +390,28 @@ print()
 
 knight = Knight(1,Square(5,5))
 knight.setup()
-knight.setSquare(Square(2,2))
+knight.setSquare(Square(3,3))
 knight.testfunc()               # We are eventually going to rename "testfunc"
                                 # to be something like "GetAllLegalMoves()".
 
 
-print()
+print("###")
 
-king = King(1,Square(5,8))
+king = King(0,Square(5,8))
 king.setup()
-king.testfunc()
 
 chessboard = Board([q,knight,king])
+
+king.testfunc(chessboard)
+
+print("###")
+
+
 
 
 # print ("Big test is coming:\n")
 
 q.testfunc(chessboard)
 
+
+# 04-30, 2:29 p.m.:  I fixed DiagonalMover, Ithink!
