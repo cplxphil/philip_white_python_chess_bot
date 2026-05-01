@@ -18,15 +18,34 @@ import copy
 
 class Board():
     def __init__(self, allPieces):
-        self.allsquares = []            # (file, rank)
-        for i in range(0,9):            # the 0 rank/file squares will be empty
-            self.allsquares.append([])
-            for j in range (0,9):
-                squareTemp = Square(i,j)
-                self.allsquares[i].append(copy.deepcopy(squareTemp))
+
+# An interesting comment:  We don't really need a board matrix; the allPieces function suffices, and that's cheaper memory-wise.
+
+#        self.allsquares = []            # (file, rank)
+#        for i in range(0,9):            # the 0 rank/file squares will be empty, and will stand for a speical move when called upon--they are for promoting to different pieces, in some cases, and 0,0 is for "off the board"
+#            self.allsquares.append([])
+#            for j in range (0,9):
+#                squareTemp = Square(i,j)
+#                self.allsquares[i].append(copy.deepcopy(squareTemp))
         self.allPieces = allPieces.copy()      # contains a list of all the piece elements
                                                # remember:  each piece has a square, not
                                                #   the other way around
+    def textDisplay(self):
+        print ("\n\n")
+        for i in range(8,0,-1):
+            printline = ""
+            for j in range(1,9):
+                foundOnePieceFlag = False
+                for selectedPiece in self.allPieces:
+                    if selectedPiece.square.rank == i and selectedPiece.square.file == j:
+                        printline += selectedPiece.pieceId + " "
+                        foundOnePieceFlag = True
+                if foundOnePieceFlag == False:
+                    printline += ". "
+            print(printline)
+            print ("\n")
+        print ("\n\n")
+            
 
 
 class Square():
@@ -43,6 +62,12 @@ class Square():
     # Because there are only 32 pieces, and there are 64 squares, it's
     #   actually quicker to do this check rather than check the squares for
     #   pieces stored in them.
+    def __eq__(self,item):
+        if not isinstance(item,Square):
+            return NotImplemented
+        else:
+            return (self.file == item.file and self.rank == item.rank)
+        
     def IsEmpty(chessboard):
         for p in chessboard.allPieces:
             if p.square.file == self.file and p.square.rank == self.rank:
@@ -54,6 +79,15 @@ class Move():
         self.move1squareTarget = move1squareTarget
         self.move2squareSource = move2squareSource
         self.move2squareTarget = move2squareTarget
+    def __eq__(self,item):                                  # The problem with this function is, I need to define a good == operator for Square too.  It's *not* needing deepcopy, it's needing ==!  I should probably remove all of the deepcopy and copy code!  I'll do it after a git commit command.
+        if not isinstance(item, Move):
+            return NotImplemented
+        else:
+            return (self.move1squareSource == item.move1squareSource and self.move1squareTarget == item.move1squareTarget and self.move2squareSource == item.move2squareSource and self.move2squareTarget == item.move2squareTarget)
+
+    def printMove(self):
+        print(f"Move:  {self.move1squareSource.file}, {self.move1squareSource.rank}, to {self.move1squareTarget.file}, {self.move1squareTarget.rank} ; {self.move2squareSource.file}, {self.move2squareSource.rank}, to {self.move2squareTarget.file}, {self.move2squareTarget.rank}")
+        
     # Note:  If move2squareSource is a square (0,1-4), it's a pawn promotion...
     #   0 means queen, 1 means rook, 2 means bishop, 3 means knight
     # Make sure to keep that in mind when you build a "MakeMove" function.
@@ -93,7 +127,72 @@ class KingSpecialMover(Piece): # all possible King castling moves, depending
     
 
 class PawnSpecialMover(Piece):
-    pass
+    def IncludeMoves(self):
+        pieceColor = self.color
+        SourceSquare = self.square
+        MovesToAddList = []
+        # en passant
+        if SourceSquare.rank == 5 and pieceColor == 1:
+            if SourceSquare.file != 8:
+                newMove = Move(copy.deepcopy(SourceSquare),Square(SourceSquare.file+1,6),Square(SourceSquare.file+1,5),Square(0,0)) # the last two parameters indicate that the pawn to the side of this pawn is captured...it will only work if the piece at that square is a pawn!
+                MovesToAddList.append(copy.deepcopy(newMove))
+            if SourceSquare.file != 1:
+                newMove = Move(copy.deepcopy(SourceSquare),Square(SourceSquare.file-1,6),Square(SourceSquare.file-1,5),Square(0,0))
+                MovesToAddList.append(copy.deepcopy(newMove))
+        if SourceSquare.rank == 4 and pieceColor == 0:
+            if SourceSquare.file != 8:
+                newMove = Move(copy.deepcopy(SourceSquare),Square(SourceSquare.file+1,3),Square(SourceSquare.file+1,4),Square(0,0)) # the last two parameters indicate that the pawn to the side of this pawn is captured...it will only work if the piece at that square is a pawn!
+                MovesToAddList.append(copy.deepcopy(newMove))
+            if SourceSquare.file != 1:
+                newMove = Move(copy.deepcopy(SourceSquare),Square(SourceSquare.file-1,3),Square(SourceSquare.file-1,3),Square(0,0))
+                MovesToAddList.append(copy.deepcopy(newMove))
+        # move two squares ahead if and only if on the first row...make sure to add in LinearObstruction restriction!
+        if SourceSquare.rank == 2 and pieceColor == 0:
+            newMove = Move(copy.deepcopy(SourceSquare),Square(SourceSquare.file,4),Square(0,0), Square(0,0))
+            MovesToAddList.append(copy.deepcopy(newMove))
+        if SourceSquare.rank == 7 and pieceColor == 1:
+            newMove = Move(copy.deepcopy(SourceSquare),Square(SourceSquare.file,5),Square(0,0),Square(0,0))
+            MovesToAddList.append(copy.deepcopy(newMove))
+        # pawn promotions, INCLUDING diagonal pawn captures!
+        if (SourceSquare.rank == 7 and pieceColor == 0) or (SourceSquare.rank == 2 and pieceColor == 1): # white pawn or black pawn
+            # straight ahead one square, promote to all 4 possibilities
+            # 0 2 is a special code for "add a knight out of nowhere", 0 3 is a special code for "bishop", 0 4 is a special code for "rook," 0 5 is a special code for "queen"
+            for promotionPieceID in range(2,6):
+                newMove = Move(copy.deepcopy(SourceSquare), Square(SourceSquare.file,SourceSquare.rank + (pieceColor == 0)*(1) + (pieceColor == 1)*(-1)), Square(0,promotionPieceID), Square(SourceSquare.file,SourceSquare.rank + (pieceColor == 0)*(1) + (pieceColor == 1)*(-1)))
+                MovesToAddList.append(copy.deepcopy(newMove))
+            # diagonal capture one square, promote to all 4 possibilities
+            for promotionPieceID in range(2,6):
+                if SourceSquare.file > 1:
+                    newMove = Move(copy.deepcopy(SourceSquare), Square(SourceSquare.file-1,SourceSquare.rank + (pieceColor == 0)*(1) + (pieceColor == 1)*(-1)), Square(0,promotionPieceID), Square(SourceSquare.file-1,SourceSquare.rank + (pieceColor == 0)*(1) + (pieceColor == 1)*(-1)))
+                    MovesToAddList.append(copy.deepcopy(newMove))
+                if SourceSquare.file < 8:
+                    newMove = Move(copy.deepcopy(SourceSquare), Square(SourceSquare.file+1,SourceSquare.rank + (pieceColor == 0)*(1) + (pieceColor == 1)*(-1)), Square(0,promotionPieceID), Square(SourceSquare.file+1,SourceSquare.rank + (pieceColor == 0)*(1) + (pieceColor == 1)*(-1)))
+                    MovesToAddList.append(copy.deepcopy(newMove))
+        # regular diagonal capture, excluding promotions
+        if (SourceSquare.rank != 7 and pieceColor == 0) or (SourceSquare.rank != 2 and pieceColor == 1):
+            if SourceSquare.file > 1:
+                newMove = Move(copy.deepcopy(SourceSquare), Square(SourceSquare.file-1,SourceSquare.rank + (pieceColor == 0)*(1) + (pieceColor == 1)*(-1)),Square(0,0),Square(0,0))
+                MovesToAddList.append(copy.deepcopy(newMove))
+            if SourceSquare.file < 8:
+                newMove = Move(copy.deepcopy(SourceSquare), Square(SourceSquare.file+1,SourceSquare.rank + (pieceColor == 0)*(1) + (pieceColor == 1)*(-1)),Square(0,0),Square(0,0))
+                MovesToAddList.append(copy.deepcopy(newMove))
+        # regular one move up move, excluding promotions
+        if pieceColor == 0 and SourceSquare.rank != 7:
+            newMove = Move(copy.deepcopy(SourceSquare), Square(SourceSquare.file,SourceSquare.rank + 1), Square(0,0), Square(0,0))
+            MovesToAddList.append(copy.deepcopy(newMove))                                      
+        if pieceColor == 1 and SourceSquare.rank != 2:
+            newMove = Move(copy.deepcopy(SourceSquare), Square(SourceSquare.file,SourceSquare.rank - 1), Square(0,0), Square(0,0))
+            MovesToAddList.append(copy.deepcopy(newMove))
+        # that's everything!
+
+        return MovesToAddList
+
+        # Note, we added in "move one square ahead" directly...we can't use vertical forward mover and limit to one square at a time because some pawn moves are two at a time
+    # also, do not add in the one-ahead move, or the diagonal capture move, if the pawn is promoting...that is handled as a special case above
+
+
+
+    
 
 class DiagonalMover(Piece):       # whether or not the target square has a piece on it, move the captured piece/non-piece to 0,0
     def IncludeMoves(self):
@@ -252,7 +351,8 @@ class LinearObstructionRestricted(Piece):
                                 toRemove = []
                                 for inToReturn in toReturn:
                                     # print ("yep!")
-                                    if moveToDrop.move1squareSource.file == inToReturn.move1squareSource.file and moveToDrop.move1squareSource.rank == inToReturn.move1squareSource.rank and moveToDrop.move1squareTarget.file == inToReturn.move1squareTarget.file and moveToDrop.move1squareTarget.rank == inToReturn.move1squareTarget.rank:
+#                                    if moveToDrop.move1squareSource.file == inToReturn.move1squareSource.file and moveToDrop.move1squareSource.rank == inToReturn.move1squareSource.rank and moveToDrop.move1squareTarget.file == inToReturn.move1squareTarget.file and moveToDrop.move1squareTarget.rank == inToReturn.move1squareTarget.rank:
+                                    if moveToDrop == inToReturn:
                                     # print("qqqq")
                                         toRemove.append(inToReturn)
                                 for item in toRemove:
@@ -280,20 +380,57 @@ class OneSquareAtATimeRestricted(Piece): # applies only to the King--the pawn ne
             if horizontalDifference > 1 or verticalDifference > 1:
                 toRemove.append(selectedMove)
         for item in toRemove:
-            toReturn.remove(item)
+            toReturn.remove(item)       # this should work fine now, because I defined equality for the object
         return toReturn
         
 
-class PawnRestricted(Piece):
+
+
+#  THIS FUNCTION IS STILL UNDER CONSTRUCTION!  IT IS NOT DONE!
+
+class PawnRestricted(Piece):  # handles:  pawn capturing when there is no piece there, pawn en passant when there is no piece there, pawn moving forwards to a square that is occupied by an opponent piece
+    def ExcludeMoves(self, chessboard, initialMovesList):
+        toReturn = initialMovesList.copy()
+        toRemove = []
+        # be careful about how promotion moves are phrased as Move() objects.  Update:  I changed how pawn promotions work.  Now, the target square is still written down as the second parameter; later, the second component of the move over-writes that square with the piece being promoted to
+
+        # pawn capturing diagonally--is there really an opponent piece there?
+        for chosenMove in initialMovesList:
+            if abs(chosenMove.move1squareTarget.file - chosenMove.move1squareSource.file) == 1 and abs(chosenMove.move1squareTarget.rank - chosenMove.move1squareSource.file) == 1:   # it's a capture move
+                clearTheCapture = False
+                for piece in chessboard.allPieces:
+                    if piece.color != self.color:           # look at positions of pieces that are not the same color as the pawn's color (self.color)
+                        if piece.square.file == chosenMove.move1squareTarget.file and piece.square.rank == chosenMove.move1squareTarget.rank:  # yes, there is an enemy piece at this level
+                            clearTheCapture = True
+                if clearTheCapture == False:
+                    toRemove.append(copy.deepcopy(chosenMove))
+
+#        print ("All items in toReturn:")
+#        for item3 in toReturn:
+#            item3.printMove()
+
+#        print ("All items in toRemove:")
+        for item in toRemove:
+#            item.printMove()
+            for item2 in toReturn:
+                if item == item2:
+                    toReturn.remove(item2)
+#                    print ("yes")
+#                else:
+#                    print("no, and:")
+#                    item.printMove()
+#                    item2.printMove()
+#                    print ("???")
+        return toReturn
+            
+
+class SpecialMovesRestricted(Piece): # restricts castling (King) only--pawn en passant is now down in "pawn restricted"
     pass
 
-class SpecialMovesRestricted(Piece): # restricts castling (King) and en passant (Pawn)
-    pass
+class CheckRestricted(Piece):  # disallows moves that leave the moving player's King in check after the move is made; this involves looking ahead 1 move, I'll need that function coded...but it's just
+    pass                        # looking "1 move deep," at all legal moves the opponent can make after the first move.
 
-class CheckRestricted(Piece):
-    pass
-
-class SameColorPieceOnTargetSquareRestriction(Piece):
+class SameColorPieceOnTargetSquareRestricted(Piece):
     def ExcludeMoves(self, chessboard,initialMovesList):
         toReturn = copy.deepcopy(initialMovesList)
         toRemove = []
@@ -331,7 +468,7 @@ class Queen(DiagonalMover, ForwardVerticalMover, BackwardVerticalMover, Horizont
             print(f"Move {i}:  {movesList[i].move1squareSource.file}, {movesList[i].move1squareSource.rank}, to {movesList[i].move1squareTarget.file}, {movesList[i].move1squareTarget.rank}")
         # print("flagB")
         movesList = LinearObstructionRestricted.ExcludeMoves(self,chessboard,movesList)
-        movesList = SameColorPieceOnTargetSquareRestriction.ExcludeMoves(self,chessboard, movesList)
+        movesList = SameColorPieceOnTargetSquareRestricted.ExcludeMoves(self,chessboard, movesList)
 #        print("flagB.5")
         for i in range(len(movesList)):
             print(f"Move {i}:  {movesList[i].move1squareSource.file}, {movesList[i].move1squareSource.rank}, to {movesList[i].move1squareTarget.file}, {movesList[i].move1squareTarget.rank}")
@@ -346,17 +483,26 @@ class Rook():
 
 
 
-# HAD TO STOP AT 3:06 P.M.
 
 class Bishop():
     def setup(self):
         self.pieceId = 'b'
     pass
 
-class Pawn():
+class Pawn(PawnSpecialMover, LinearObstructionRestricted, CheckRestricted, SameColorPieceOnTargetSquareRestricted):
     def setup(self):
         self.pieceId = 'p'
-    pass
+    def testfunc(self, chessboard):
+        movesList = []
+        movesList += PawnSpecialMover.IncludeMoves(self).copy()
+        movesList = LinearObstructionRestricted.ExcludeMoves(self,chessboard,movesList)
+        movesList = SameColorPieceOnTargetSquareRestricted.ExcludeMoves(self, chessboard, movesList)
+        movesList = PawnRestricted.ExcludeMoves(self,chessboard,movesList)
+        for i in range(len(movesList)):
+            print(f"Move {i}:  {movesList[i].move1squareSource.file}, {movesList[i].move1squareSource.rank}, to {movesList[i].move1squareTarget.file}, {movesList[i].move1squareTarget.rank}")
+
+
+
 
 class Knight(KnightMover):
     def setup(self):
@@ -382,6 +528,8 @@ class King(DiagonalMover, ForwardVerticalMover, BackwardVerticalMover, Horizonta
 
 
 
+
+
 q = Queen(1,Square(4,8))
 q.setup()  # always run the setup function right away
 # q.testfunc()
@@ -397,10 +545,23 @@ knight.testfunc()               # We are eventually going to rename "testfunc"
 
 print("###")
 
-king = King(0,Square(5,8))
+king = King(0,Square(5,1))
 king.setup()
 
-chessboard = Board([q,knight,king])
+
+
+pawn = Pawn(1,Square(2,2))
+pawn.setup()
+
+
+
+chessboard = Board([q,knight,king,pawn])
+
+print ("pre-pawn")
+
+pawn.testfunc(chessboard)
+
+print ("post-pawn")
 
 king.testfunc(chessboard)
 
@@ -414,4 +575,16 @@ print("###")
 q.testfunc(chessboard)
 
 
-# 04-30, 2:29 p.m.:  I fixed DiagonalMover, Ithink!
+
+chessboard.textDisplay()
+
+
+
+
+
+# 04-30, 2:29 p.m.:  I fixed DiagonalMover, I think!
+
+
+
+# source:  https://stackoverflow.com/questions/1227121/compare-object-instances-for-equality-by-their-attributes (on __eq__ method)
+# Something big I learned:  Use the __eq__ method to compare items that are class objects.  That way, you can remove them properly when you go through a list of them....
