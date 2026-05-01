@@ -580,6 +580,9 @@ chessboard.textDisplay()
 
 
 
+# 05-01:  2:34 p.m.:  I coded for about 2 hours and 15 minutes today!  I need a break.
+
+
 
 
 # 04-30, 2:29 p.m.:  I fixed DiagonalMover, I think!
