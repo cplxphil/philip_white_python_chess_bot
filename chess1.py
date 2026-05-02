@@ -30,6 +30,29 @@ class Board():
         self.allPieces = allPieces.copy()      # contains a list of all the piece elements
                                                # remember:  each piece has a square, not
                                                #   the other way around
+        self.whiteARookHasMoved = False
+        self.whiteHRookHasMoved = False
+        self.blackARookHasMoved = False
+        self.blackHRookHasMoved = False
+        self.whiteKingHasMoved = False
+        self.blackKingHasMoved = False
+
+    def MakeMove(self, theMove):        # Make sure to track each Rook and King at the starting square, and flip the flags if one of those pieces moves for the first time
+        pass
+
+    def PieceSquareCheck(self,whichPiece, whichSquare,chessboard):
+        movesList = whichPiece.getAllLegalMoves(chessboard)
+        for item in movesList:  # Warning:  It isn't "square check" if it's a vertical pawn move
+            if item.move1squareSource.file == whichPiece.square.file and item.move1squareSource.rank == whichPiece.square.rank and item.move1squareTarget.file == whichSquare.file and item.move1squareTarget.rank == whichSquare.rank:
+                # pawn check--non-vertical move or not a pawn means it's OK
+                if whichPiece.id != 'p' or item.move1squareSource.file != item.move1squareTarget.file:
+                    return true
+        return false
+
+    
+
+
+                                               
     def textDisplay(self):
         print ("\n\n")
         for i in range(8,0,-1):
@@ -101,8 +124,13 @@ class Piece():
         self.color = color        # 0 is white, 1 is black
         # type is determined by the class that inherits a mover class later on;
         # the mover classes inherit this class
-    def GetAllLegalMoves():
+    def GetAllLegalMoves(self,chessboard):       # I added in the chessboard parameter
         pass
+
+    # use this function below as the first step of getalllegalmoves
+    def GetAllLegalMovesButIgnoreCheckTests(self,chessboard):       # this will consider some moves that are not legal, to aid in "check threat" tests within the broader getlegalmovesfunction
+        pass
+        
     def setSquare(self,sq):
         self.square = sq
 
@@ -385,8 +413,12 @@ class OneSquareAtATimeRestricted(Piece): # applies only to the King--the pawn ne
         
 
 
-
+#  Update:  Ignore the line below, this function is now done.  Test it and everything else later!  05-02, 12:06 p.m.
 #  THIS FUNCTION IS STILL UNDER CONSTRUCTION!  IT IS NOT DONE!
+# 05-02:  Maybe it is done now?  What is left to do?
+# What is left to do is the pawn moving forward when there's a piece there.
+# That is not captured by the same piece restriction function, because that works
+#   only for the same color piece.
 
 class PawnRestricted(Piece):  # handles:  pawn capturing when there is no piece there, pawn en passant when there is no piece there, pawn moving forwards to a square that is occupied by an opponent piece
     def ExcludeMoves(self, chessboard, initialMovesList):
@@ -404,6 +436,14 @@ class PawnRestricted(Piece):  # handles:  pawn capturing when there is no piece 
                             clearTheCapture = True
                 if clearTheCapture == False:
                     toRemove.append(copy.deepcopy(chosenMove))
+
+        for chosenMove in initialMovesList: # this should work, even for promotion...it's a little redundant with the samecolorpiece restriction, since we're not checking color of piece on occupied square
+            if chosenMove.move1squareSource.file == chosenMove.move1squareTarget.file and chosenMove.move1squareSource.rank == chosenMove.move1squareTarget.rank + 1*(self.color==0) + (-1)*(self.color==1):
+                for eachPiece in chessboard.allPieces:
+                    if eachPiece.square.file == chosenMove.move1squareTarget.file and eachPiece.square.rank == chosenMove.move1squareTarget.rank:  # The square that the pawn is wanting to move to is not empty.
+                        # Don't remove the same move twice!
+                        if not (copy.deepcopy(chosenMove)) in toRemove:
+                            toRemove.append(copy.deepcopy(chosenMove))                        
 
 #        print ("All items in toReturn:")
 #        for item3 in toReturn:
@@ -424,11 +464,58 @@ class PawnRestricted(Piece):  # handles:  pawn capturing when there is no piece 
         return toReturn
             
 
+
+# List of everything we need to check:
+# No threats to squares including the rook or the King or anything in between
+# No obstructions (other pieces) in between the Rook and the King
+# King and Rook are both in the right square
+# King has never moved before
+# Rook has never moved before
+# Warning:  What if a pawn promotes to a Rook, and then we try to castle with that rook?
+#  The answer is, we track the rooks that start at the corner squares, and if there's ever a move from one of those 4 corner squares, the linked appropriate "flag" goes off
+
+
+
+# This function is under construction!
+
 class SpecialMovesRestricted(Piece): # restricts castling (King) only--pawn en passant is now down in "pawn restricted"
-    pass
+    def ExcludeMoves(self,chessboard,initialMovesList):
+        toReturn = copy.deepcopy(initialMovesList)
+        toRemove = []
+        for item in toReturn:
+            if (item.move2sourceSquare.file == 1 and item.move2sourceSquare.rank == 1) or (item.move2sourceSquare.file == 8 and item.move2sourceSquare.rank == 1) or (item.move2sourceSquare.file == 1 and item.move2sourceSquare.rank == 8) or (item.move2sourceSquare.file == 8 and item.move2sourceSquare.rank == 8):
+                pass
+            # If the second item in the move data structure moves a piece at one of the corners, then it's a rook being moved for castling
+
+
+
+# A problem:  To check if the King is in check, we have to call "get legal moves"
+#   ...but that is the function that we are trying to define.  We don't want that
+#   kind of recursion.  Thus, the answer is, create a "partial get legal moves"
+#   function, that does everything but the check restriction and the castling
+#   (special moves) restriction.  To avoid repeating code, put all of that
+#   "partial get all legal moves" function together, and then call a function
+#   that populates legal moves using that, but excludes the two functions for
+#   specialmovesrestricted and checkrestricted.  There are two kinds of "check"
+#   we're looking at...check of the King directly, and check at any of the
+#   squares in between the King and the Rook on the path to castling.  The good
+#   news is, castling will never lead to a capture, or a fulfilled capture of
+#   the King after a checkmate...so it's safe to remove specialmoves and
+#   king check when we check for those two moves, because we don't need to worry
+#   if the other player is in check when threatening the King, and, we don't
+#   need to worry that castling is a way to "capture" the king, i.e., the
+#   potential to castle is never a checking move...even though it could lead to
+#   check.  The opponent King is not threatened by castling, because castling is
+#   not possible if the opponent King is in the way of the two opponent pieces,
+#   the other King and the Rook.
 
 class CheckRestricted(Piece):  # disallows moves that leave the moving player's King in check after the move is made; this involves looking ahead 1 move, I'll need that function coded...but it's just
     pass                        # looking "1 move deep," at all legal moves the opponent can make after the first move.
+
+
+
+
+
 
 class SameColorPieceOnTargetSquareRestricted(Piece):
     def ExcludeMoves(self, chessboard,initialMovesList):
@@ -489,7 +576,7 @@ class Bishop():
         self.pieceId = 'b'
     pass
 
-class Pawn(PawnSpecialMover, LinearObstructionRestricted, CheckRestricted, SameColorPieceOnTargetSquareRestricted):
+class Pawn(PawnSpecialMover, LinearObstructionRestricted, CheckRestricted, SameColorPieceOnTargetSquareRestricted, PawnRestricted):
     def setup(self):
         self.pieceId = 'p'
     def testfunc(self, chessboard):
@@ -498,6 +585,7 @@ class Pawn(PawnSpecialMover, LinearObstructionRestricted, CheckRestricted, SameC
         movesList = LinearObstructionRestricted.ExcludeMoves(self,chessboard,movesList)
         movesList = SameColorPieceOnTargetSquareRestricted.ExcludeMoves(self, chessboard, movesList)
         movesList = PawnRestricted.ExcludeMoves(self,chessboard,movesList)
+        print ("test")
         for i in range(len(movesList)):
             print(f"Move {i}:  {movesList[i].move1squareSource.file}, {movesList[i].move1squareSource.rank}, to {movesList[i].move1squareTarget.file}, {movesList[i].move1squareTarget.rank}")
 
@@ -591,3 +679,7 @@ chessboard.textDisplay()
 
 # source:  https://stackoverflow.com/questions/1227121/compare-object-instances-for-equality-by-their-attributes (on __eq__ method)
 # Something big I learned:  Use the __eq__ method to compare items that are class objects.  That way, you can remove them properly when you go through a list of them....
+
+
+
+# The best way to test this will be to play an actual game of chess.  Also, test out some of the more obscure things by setting up positions that have issues with castling, such as a threat in the route that stops the castling from being legal.
